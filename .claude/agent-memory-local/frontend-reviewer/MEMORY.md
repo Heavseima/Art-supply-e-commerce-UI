@@ -1,0 +1,1 @@
+- [Project Conventions](project_conventions.md) — palette, primitive locations, Next.js 16 caching model, known issues found in 2026-06-06 audit

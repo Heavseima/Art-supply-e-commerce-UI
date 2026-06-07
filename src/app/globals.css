@@ -1,26 +1,165 @@
 @import "tailwindcss";
 
+/*
+ * Premium editorial art-boutique theme.
+ * Canvas Cream surfaces, absolute Ink Charcoal type, hairline rules.
+ * The product imagery supplies the color — the chrome stays near-monochrome.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: #faf9f6; /* canvas cream */
+  --canvas-deep: #f1efe9; /* warm cream band */
+  --ink: #1c1a1a; /* absolute charcoal */
+  --ink-muted: #736e68; /* warm muted */
+  --hairline: rgba(28, 26, 26, 0.12);
+  --hairline-strong: rgba(28, 26, 26, 0.22);
+
+  /* Single restrained organic accent — used sparingly (hover / sale). */
+  --accent: #9c4a2f; /* deep sienna */
+  --accent-deep: #7d3a24;
+  --accent-soft: #f0e7e2;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--canvas);
+  --color-canvas-deep: var(--canvas-deep);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
+  --color-accent: var(--accent);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-soft: var(--accent-soft);
+
+  --font-sans: var(--font-body);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Editorial display serif. */
+.font-display {
+  font-family: var(--font-display), ui-serif, Georgia, "Times New Roman", serif;
+}
+
+/*
+ * Fluid vertical rhythm. Section padding/gaps scale with the viewport via
+ * clamp() so the layout never feels cavernous on laptops yet stays generous
+ * on large screens.
+ */
+@utility section-y {
+  padding-block: clamp(3rem, 6vw, 6.5rem);
+}
+@utility block-gap {
+  margin-bottom: clamp(1.75rem, 3.5vw, 3.25rem);
+}
+
+/* Slow, restrained editorial reveal. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rise {
+  animation: rise-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Staggered hero reveal — children rise in sequence. */
+.animate-rise:nth-child(1) { animation-delay: 0ms; }
+.animate-rise:nth-child(2) { animation-delay: 80ms; }
+.animate-rise:nth-child(3) { animation-delay: 160ms; }
+.animate-rise:nth-child(4) { animation-delay: 240ms; }
+
+/*
+ * Scroll-reveal — pure CSS scroll-driven animation (runs off the main thread,
+ * zero JS). Progressive enhancement: browsers without `animation-timeline`
+ * simply show the content. Disabled under reduced-motion.
+ */
+@keyframes reveal-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .reveal {
+      animation: reveal-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 55%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise {
+    animation: none;
+  }
+}
+
+/* Smooth in-page scrolling for hash/anchor navigation. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/*
+ * Animated editorial underline. The link reveals a hairline from the left on
+ * hover (and stays for the active state via `is-active`). GPU-friendly.
+ */
+.link-underline {
+  position: relative;
+}
+.link-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  height: 1px;
+  width: 100%;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.link-underline:hover::after,
+.link-underline.is-active::after {
+  transform: scaleX(1);
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border: 3px solid var(--canvas);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--canvas);
 }
