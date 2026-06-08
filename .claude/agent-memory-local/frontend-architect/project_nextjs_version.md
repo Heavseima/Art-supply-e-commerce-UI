@@ -26,5 +26,7 @@ Verified from `node_modules/next/dist/docs/` (read these, do not assume from tra
 
 **Also:** `next typegen` (or `next dev`/`next build`) must run before `tsc --noEmit` will accept `PageProps<'/route'>` for any non-`/` route — the literal route union is generated. Non-deterministic ops like `new Date()` in a prerendered (static-shell) component also error; use a constant or defer via `connection()`+Suspense.
 
+**Client Router Cache + component state:** A `<Link>`/`Button href` client navigation reuses cached route segments, so a client component's local React state (`useState`) can SURVIVE leaving and returning to a route — it is NOT guaranteed to remount fresh. Docs (instant-navigation.md): on a client nav between siblings only the segment below the shared layout re-renders; tree above is reused. Implication: don't rely on "navigating back resets my component". Derive view state from the source of truth (e.g. the LocalStorage cart) instead of a stale local flag. ESLint rule `react-hooks/set-state-in-effect` also FORBIDS synchronous `setState` inside `useEffect` — prefer deriving values during render over reset-effects.
+
 **Why:** AGENTS.md/CLAUDE.md explicitly warn the API differs from training data.
 **How to apply:** Use `'use cache'`+`cacheLife`/`cacheTag` for explicit caching; await params/searchParams INSIDE a Suspense child; run `next typegen` before type-checking.

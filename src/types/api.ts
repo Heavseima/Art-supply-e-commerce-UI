@@ -70,3 +70,25 @@ export interface ShippingDetails {
   readonly postalCode: string;
   readonly country: string;
 }
+
+/** A single line item submitted when placing an order (mirrors backend `OrderLine`). */
+export interface OrderItemInput {
+  readonly productId: ProductId;
+  readonly quantity: number;
+}
+
+/** Payload sent to the backend `POST /orders` endpoint (mirrors `OrderRequest`). */
+export interface PlaceOrderInput {
+  readonly customerName: string;
+  readonly customerEmail: string;
+  readonly shippingAddress: string;
+  readonly items: readonly OrderItemInput[];
+}
+
+/** Confirmed order summary surfaced after a successful checkout. */
+export interface OrderConfirmation {
+  readonly orderReference: string;
+  readonly total: number;
+  readonly placedAt: string;
+  readonly customerEmail: string;
+}

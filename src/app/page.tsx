@@ -44,7 +44,9 @@ export default function HomePage() {
             description="Four houses of materials, each chosen with intent. Tap in and start building your kit."
             className="reveal block-gap"
           />
-          <CategoryShowcase />
+          <Suspense fallback={<GridSkeleton count={4} />}>
+            <CategoryShowcase />
+          </Suspense>
         </div>
       </section>
 

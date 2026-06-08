@@ -36,12 +36,25 @@
 html {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /*
+   * Demo legibility: nudge the root font-size up (16px → 18px). Because
+   * the app's Tailwind sizing is rem-based, every text and rem-spacing value
+   * scales proportionally from here — no per-component edits required.
+   * To revert to the original look, set this back to 16px (or remove the line).
+   */
+  font-size: 18px;
 }
 
 body {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  /*
+   * Demo legibility: default body weight normal → medium (400 → 500). Headings
+   * use the display serif with their own explicit weight classes, so they stay
+   * proportionally bolder. To revert, remove this font-weight line.
+   */
+  font-weight: 500;
 }
 
 /* Editorial display serif. */
