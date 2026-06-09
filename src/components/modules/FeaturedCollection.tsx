@@ -7,9 +7,9 @@ interface FeaturedCollectionProps {
 
 /**
  * Async server component that pulls the curated featured slice. The data read
- * is explicitly cached in `getFeaturedProducts` (`'use cache'` + `cacheLife`),
- * so this is included in the static shell; rendered under a Suspense boundary
- * on the landing page so the rest of the page never blocks on it.
+ * is dynamic (fetched fresh each request in `getFeaturedProducts`); rendered
+ * under a Suspense boundary on the landing page so it streams in as a dynamic
+ * hole while the rest of the static shell renders instantly.
  */
 export async function FeaturedCollection({ limit = 4 }: FeaturedCollectionProps) {
   const products = await getFeaturedProducts(limit);

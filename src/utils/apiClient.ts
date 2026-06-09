@@ -24,7 +24,6 @@ if (process.env.NODE_ENV !== "production") {
   try {
     // Throws synchronously if API_BASE isn't a well-formed absolute URL.
     new URL(API_BASE);
-    // eslint-disable-next-line no-console
     console.info(`[apiClient] Resolved API_BASE = ${API_BASE}`);
   } catch {
     throw new Error(

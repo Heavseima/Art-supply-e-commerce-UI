@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
@@ -52,11 +52,16 @@ export function PrimaryNav({ categories }: { categories: readonly Category[] }) 
   const onProducts = pathname.startsWith("/products");
   const [open, setOpen] = useState(false);
 
-  // Close the dropdown whenever the route or active category changes
-  // (i.e. after a navigation completes).
-  useEffect(() => {
+  // Close the dropdown whenever the route or active category changes (i.e.
+  // after a navigation completes). Done by adjusting state during render
+  // against the previous nav key rather than in an effect — React's
+  // recommended pattern, and it avoids a cascading-render setState-in-effect.
+  const navKey = `${pathname}?${activeCat ?? ""}`;
+  const [prevNavKey, setPrevNavKey] = useState(navKey);
+  if (navKey !== prevNavKey) {
+    setPrevNavKey(navKey);
     setOpen(false);
-  }, [pathname, activeCat]);
+  }
 
   const close = () => setOpen(false);
 

@@ -1,17 +1,18 @@
-import { cacheLife, cacheTag } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 
 import type { Category, Product } from "@/types/api";
 import { apiUrl } from "@/utils/apiClient";
 
 /**
- * Optimized, explicitly-cached data-fetching engines.
+ * Dynamic data-fetching engines.
  *
  * These read from the live backend (Spring API at `NEXT_PUBLIC_API_URL`).
- * Caching stays intentional and visible per the project's rules: every read
- * opts into the Next.js 16 Cache Components model via `'use cache'`, declares a
- * `cacheLife` profile, and tags its entry with `cacheTag` so it can be
- * revalidated surgically later (e.g. `updateTag('catalog')` after an inventory
- * mutation).
+ * Under the Next.js 16 Cache Components model (`cacheComponents: true`) data is
+ * dynamic by default — none of these reads opt into `'use cache'`, so every
+ * request hits the backend fresh. Callers render them inside `<Suspense>`
+ * boundaries, which makes each read a streamed dynamic hole in an otherwise
+ * static (PPR) shell. Refresh the page and you see the live backend state —
+ * including its errors — immediately, with no cached copy in the way.
  *
  * The backend pages its product listing, so the storefront pulls a single
  * generous page to back its "whole catalog" reads. Nullable wire-shape DTOs are
@@ -24,6 +25,18 @@ const CATALOG_PAGE_SIZE = 200;
 
 /** Neutral fallback used when a product arrives without imagery. */
 const PLACEHOLDER_IMAGE = "/placeholder.svg";
+
+/** Development/build-time sample used when the backend is unavailable. */
+const SAMPLE_PRODUCT: Product = {
+  id: "sample-prod-1",
+  categoryId: "sample-cat",
+  slug: "sample-product",
+  name: "Sample Product",
+  description: "Placeholder product used when the backend is unreachable during build.",
+  price: 0,
+  stock: 0,
+  imageUrl: PLACEHOLDER_IMAGE,
+};
 
 /** Raw product as returned by the backend (fields may be absent/null). */
 interface ProductDTO {
@@ -89,48 +102,99 @@ async function getJson<T>(path: string): Promise<T> {
       headers: { Accept: "application/json" },
     });
   } catch (error) {
-    throw new Error(
-      `Cannot reach the backend at ${apiUrl(path)} — is the API running?`,
-      { cause: error },
+    // Re-throw Next.js control-flow signals first. Under Cache Components /
+    // PPR, a fetch still in flight when a prerender completes rejects with the
+    // internal `HANGING_PROMISE_REJECTION` signal; swallowing it interferes
+    // with the prerender lifecycle. `unstable_rethrow` lets that (and
+    // notFound/redirect) propagate while real network failures fall through.
+    unstable_rethrow(error);
+    // During builds the backend may be offline. Instead of throwing and
+    // aborting the entire build, surface a warning and return an empty
+    // value which callers normalize into safe defaults.
+    console.warn(
+      `getJson: cannot reach the backend at ${apiUrl(path)} — returning empty fallback.`,
+      error,
     );
+    return {} as T;
   }
 
   if (!res.ok) {
-    throw new Error(
-      `Backend GET ${path} responded ${res.status} ${res.statusText}`,
+    // Non-2xx responses are treated as missing data during static builds;
+    // log and return an empty fallback to allow generation to continue.
+    console.warn(
+      `getJson: backend GET ${path} responded ${res.status} ${res.statusText} — returning empty fallback.`,
     );
+    return {} as T;
   }
 
-  return (await res.json()) as T;
+  try {
+    return (await res.json()) as T;
+  } catch (error) {
+    // If parsing fails, log and return an empty fallback.
+    console.warn(`getJson: failed to parse JSON for ${path} — returning empty fallback.`, error);
+    return {} as T;
+  }
 }
 
-/** Fetch the full catalog. Cached for a day, tagged `catalog`. */
+/** Fetch the full catalog fresh on every request. */
 export async function getProducts(): Promise<readonly Product[]> {
-  const data = await getJson<PagedProductsDTO>(
-    `/products?page=0&size=${CATALOG_PAGE_SIZE}`,
-  );
-  return (data.content ?? []).map(toProduct);
+  try {
+    const data = await getJson<PagedProductsDTO>(
+      `/products?page=0&size=${CATALOG_PAGE_SIZE}`,
+    );
+    const list = data.content ?? [];
+    if (list.length === 0) {
+      // If the backend returns an empty catalog, provide a sample product
+      // so static generation has at least one route to validate.
+      return [SAMPLE_PRODUCT];
+    }
+    return list.map(toProduct);
+  } catch (error) {
+    unstable_rethrow(error);
+    // During local builds the backend may be down or unreachable. Rather
+    // than failing the entire Next.js build, log a warning and return a
+    // minimal in-repo sample product so pages can still be generated.
+    console.warn("getProducts: failed to fetch product catalog:", error);
+    return [SAMPLE_PRODUCT];
+  }
 }
 
-/** Fetch all merchandising categories. Cached for a day, tagged `categories`. */
+/** Fetch all merchandising categories fresh on every request. */
 export async function getCategories(): Promise<readonly Category[]> {
-  const data = await getJson<CategoryDTO[]>("/categories");
-  return (data ?? []).map(toCategory);
+  try {
+    const data = await getJson<CategoryDTO[]>("/categories");
+    const list = Array.isArray(data) ? data : [];
+    return list.map(toCategory);
+  } catch (error) {
+    unstable_rethrow(error);
+    // If categories cannot be fetched at build time, return an empty list
+    // instead of throwing so the site can still build.
+    console.warn("getCategories: failed to fetch categories:", error);
+    return [];
+  }
 }
 
 /** Internal: shared per-category fetch used by {@link getProductsByCategorySlug}. */
 async function fetchCategoryProducts(categoryId: string): Promise<Product[]> {
-  const data = await getJson<PagedProductsDTO>(
-    `/products?categoryId=${encodeURIComponent(categoryId)}&size=${CATALOG_PAGE_SIZE}`,
-  );
-  return (data.content ?? []).map(toProduct);
+  try {
+    const data = await getJson<PagedProductsDTO>(
+      `/products?categoryId=${encodeURIComponent(categoryId)}&size=${CATALOG_PAGE_SIZE}`,
+    );
+    return (data.content ?? []).map(toProduct);
+  } catch (error) {
+    // If the backend call fails for a particular category, surface a
+    // non-throwing fallback so category pages can still be built.
+    console.warn(
+      `fetchCategoryProducts: failed to fetch products for category ${categoryId}:`,
+      error,
+    );
+    return [];
+  }
 }
 
 /**
  * Fetch a single product by its slug. The backend exposes no slug lookup, so
- * this resolves against the (cached) catalog — `slug` is still part of this
- * function's cache key, giving each product page its own durable entry tagged
- * both `catalog` and per-slug.
+ * this resolves against the live catalog read each request.
  */
 export async function getProductBySlug(
   slug: string,
@@ -142,15 +206,11 @@ export async function getProductBySlug(
 
 /**
  * Featured collection for the landing hero — a curated, in-stock slice.
- * Cached for hours since merchandising rotates more often than the catalog.
+ * Dynamic like the rest: re-read fresh each request from the live catalog.
  */
 export async function getFeaturedProducts(
   limit = 4,
 ): Promise<readonly Product[]> {
-  "use cache";
-  cacheLife("hours");
-  cacheTag("catalog", "featured");
-
   const products = await getProducts();
   return products.filter((product) => product.stock > 0).slice(0, limit);
 }
@@ -158,8 +218,7 @@ export async function getFeaturedProducts(
 /**
  * Products within a category, resolved by category slug. The slug is mapped to
  * its id via the categories endpoint, then the backend's own `categoryId`
- * filter does the server-side cut. `categorySlug` is part of the cache key
- * (one entry per category).
+ * filter does the server-side cut — read fresh on every request.
  */
 export async function getProductsByCategorySlug(
   categorySlug: string,

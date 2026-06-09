@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Playfair_Display, Jost } from "next/font/google";
+import { unstable_rethrow } from "next/navigation";
 
 import "./globals.css";
 import { ElegantNavbar } from "@/components/modules/ElegantNavbar";
@@ -77,6 +78,7 @@ async function NavbarChrome() {
   try {
     [categories, catalog] = await Promise.all([getCategories(), getProducts()]);
   } catch (error) {
+    unstable_rethrow(error);
     console.error("Failed to load navbar chrome data:", error);
   }
   return <ElegantNavbar categories={categories} catalog={catalog} />;
@@ -88,6 +90,7 @@ async function FooterChrome() {
   try {
     categories = await getCategories();
   } catch (error) {
+    unstable_rethrow(error);
     console.error("Failed to load footer chrome data:", error);
   }
   return <SiteFooter categories={categories} />;
