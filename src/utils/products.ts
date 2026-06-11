@@ -1,23 +1,36 @@
 import { unstable_rethrow } from "next/navigation";
 
 import type { Category, Product } from "@/types/api";
-import { apiUrl } from "@/utils/apiClient";
+import {
+  apiUrl,
+  isEmptyDataRequested,
+  isLiveDataConfigured,
+} from "@/utils/apiClient";
+import { STATIC_CATEGORIES, STATIC_PRODUCTS } from "@/utils/staticData";
 
 /**
- * Dynamic data-fetching engines.
+ * Catalog data engines — two states (see {@link isLiveDataConfigured}).
  *
- * These read from the live backend (Spring API at `NEXT_PUBLIC_API_URL`).
- * Under the Next.js 16 Cache Components model (`cacheComponents: true`) data is
- * dynamic by default — none of these reads opt into `'use cache'`, so every
- * request hits the backend fresh. Callers render them inside `<Suspense>`
- * boundaries, which makes each read a streamed dynamic hole in an otherwise
- * static (PPR) shell. Refresh the page and you see the live backend state —
- * including its errors — immediately, with no cached copy in the way.
+ *  - STATE A — Static (current default): no `NEXT_PUBLIC_API_URL` configured.
+ *    Every engine returns the canned catalog from `@/utils/staticData`. No
+ *    network call is made; the live `fetch(...)` body is commented out where it
+ *    would otherwise run, kept intact below it as the live-path reference.
+ *  - STATE B — Live: `NEXT_PUBLIC_API_URL` is a valid origin. The original
+ *    backend reads run unchanged.
  *
- * The backend pages its product listing, so the storefront pulls a single
- * generous page to back its "whole catalog" reads. Nullable wire-shape DTOs are
- * normalized into the app's strict `Product` / `Category` types at the edge, so
- * the rest of the app never sees a missing backend field.
+ * Live-path notes (STATE B): under the Next.js 16 Cache Components model
+ * (`cacheComponents: true`) data is dynamic by default — none of these reads opt
+ * into `'use cache'`, so every request hits the backend fresh. Callers render
+ * them inside `<Suspense>` boundaries, which makes each read a streamed dynamic
+ * hole in an otherwise static (PPR) shell. The backend pages its product
+ * listing, so the storefront pulls a single generous page to back its "whole
+ * catalog" reads. Nullable wire-shape DTOs are normalized into the app's strict
+ * `Product` / `Category` types at the edge, so the rest of the app never sees a
+ * missing backend field.
+ *
+ * To flip back to live data: set `NEXT_PUBLIC_API_URL` to your backend origin
+ * and restart the dev server. No code change is required — the runtime branch
+ * below already re-activates the live reads.
  */
 
 /** Generous page size to pull the full catalog in one request for the store. */
@@ -136,8 +149,21 @@ async function getJson<T>(path: string): Promise<T> {
   }
 }
 
-/** Fetch the full catalog fresh on every request. */
+/** The full catalog. Static by default; live backend read when configured. */
 export async function getProducts(): Promise<readonly Product[]> {
+  // Per-request demo override (`?data=none`): empty, as if a fetch returned none.
+  if (await isEmptyDataRequested()) {
+    return [];
+  }
+
+  // STATE A — no data source configured: serve the static catalog.
+  if (!isLiveDataConfigured) {
+    return STATIC_PRODUCTS;
+  }
+
+  // STATE B — live backend. (Commented out while in the static state above;
+  // re-activates automatically once NEXT_PUBLIC_API_URL is set.)
+  // ----- LIVE FETCH (restore by setting NEXT_PUBLIC_API_URL) -----
   try {
     const data = await getJson<PagedProductsDTO>(
       `/products?page=0&size=${CATALOG_PAGE_SIZE}`,
@@ -157,10 +183,23 @@ export async function getProducts(): Promise<readonly Product[]> {
     console.warn("getProducts: failed to fetch product catalog:", error);
     return [SAMPLE_PRODUCT];
   }
+  // ----- END LIVE FETCH -----
 }
 
-/** Fetch all merchandising categories fresh on every request. */
+/** All merchandising categories. Static by default; live read when configured. */
 export async function getCategories(): Promise<readonly Category[]> {
+  // Per-request demo override (`?data=none`): empty, as if a fetch returned none.
+  if (await isEmptyDataRequested()) {
+    return [];
+  }
+
+  // STATE A — no data source configured: serve the static categories.
+  if (!isLiveDataConfigured) {
+    return STATIC_CATEGORIES;
+  }
+
+  // STATE B — live backend. (Inert while in the static state above.)
+  // ----- LIVE FETCH (restore by setting NEXT_PUBLIC_API_URL) -----
   try {
     const data = await getJson<CategoryDTO[]>("/categories");
     const list = Array.isArray(data) ? data : [];
@@ -172,6 +211,7 @@ export async function getCategories(): Promise<readonly Category[]> {
     console.warn("getCategories: failed to fetch categories:", error);
     return [];
   }
+  // ----- END LIVE FETCH -----
 }
 
 /** Internal: shared per-category fetch used by {@link getProductsByCategorySlug}. */
@@ -193,8 +233,9 @@ async function fetchCategoryProducts(categoryId: string): Promise<Product[]> {
 }
 
 /**
- * Fetch a single product by its slug. The backend exposes no slug lookup, so
- * this resolves against the live catalog read each request.
+ * A single product by its slug. The backend exposes no slug lookup, so this
+ * resolves against {@link getProducts} — which means it transparently follows
+ * the static/live state (no branch needed here).
  */
 export async function getProductBySlug(
   slug: string,
@@ -205,8 +246,9 @@ export async function getProductBySlug(
 }
 
 /**
- * Featured collection for the landing hero — a curated, in-stock slice.
- * Dynamic like the rest: re-read fresh each request from the live catalog.
+ * Featured collection for the landing hero — a curated, in-stock slice. Reads
+ * through {@link getProducts}, so it follows the static/live state with no
+ * branch of its own.
  */
 export async function getFeaturedProducts(
   limit = 4,
@@ -223,10 +265,19 @@ export async function getFeaturedProducts(
 export async function getProductsByCategorySlug(
   categorySlug: string,
 ): Promise<readonly Product[]> {
-
   const categories = await getCategories();
   const category = categories.find((c) => c.slug === categorySlug);
   if (!category) return [];
 
+  // STATE A — static: cut the in-repo catalog by the resolved category id.
+  if (!isLiveDataConfigured) {
+    return STATIC_PRODUCTS.filter(
+      (product) => product.categoryId === category.id,
+    );
+  }
+
+  // STATE B — live backend filter. (Inert while in the static state above.)
+  // ----- LIVE FETCH (restore by setting NEXT_PUBLIC_API_URL) -----
   return fetchCategoryProducts(category.id);
+  // ----- END LIVE FETCH -----
 }
